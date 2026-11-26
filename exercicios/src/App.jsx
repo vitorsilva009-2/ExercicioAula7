@@ -1,121 +1,96 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useRef, useState } from 'react'
+import { apiGet, apiPost, apiPut, apiDelete } from './api'
+import ListaUsuario from './ListaUsuario'
+import FormUsuario from './FormUser'
+
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [usuarios, setUsuarios] = useState(null)
+  const [erroLista, setErroLista] = useState(null)
+  const [erroAcao, setErroAcao] = useState(null)
+  const [formAberto, setFormAberto] = useState(null) // null | 'novo' | usuário
+  const controleRef = useRef(null)
+
+  useEffect(() => {
+  const controle = new AbortController()
+  controleRef.current = controle
+
+  async function buscar() {
+    try {
+      setUsuarios(await apiGet('/users', { signal: controle.signal }))
+    } catch (e) {
+      if (e.name !== 'AbortError') setErroLista(mensagemDeErro(e))
+    }
+  }
+  buscar()
+
+  return () => controle.abort()
+}, [])
+
+  async function salvarUsuario(dados) {
+    const signal = controleRef.current.signal
+    if (formAberto === 'novo') {
+      const criado = await apiPost('/users', dados, { signal })
+      setUsuarios(prev => {
+        const proximoId = prev.length ? Math.max(...prev.map(u => u.id)) + 1 : 1
+        return [...prev, { ...criado, id: proximoId }]
+      })
+    } else {
+      const salvo = await apiPut(
+        `/users/${formAberto.id}`,
+        { ...formAberto, ...dados },
+        { signal }
+      )
+      setUsuarios(prev => prev.map(u => (u.id === formAberto.id ? salvo : u)))
+    }
+    setFormAberto(null)
+  }
+  function mensagemDeErro(e) {
+  if (e.name === 'ApiError' && e.status === 404) return 'Recurso não encontrado'
+  if (e.name === 'ApiError' && e.status >= 500) return 'Erro no servidor'
+  if (e.name === 'ApiError') return `Erro ${e.status}`
+  return 'Falha de rede'   // TypeError: Failed to fetch
+  }
+  async function excluirUsuario(id) {
+    const anterior = usuarios
+    setErroAcao(null)
+    setUsuarios(prev => prev.filter(u => u.id !== id)) // otimista
+    try {
+      await apiDelete(`/users/${id}`, { signal: controleRef.current.signal })
+      console.log(`Usuário ${id} excluído`)
+    }  catch (e) {
+  if (e.name === 'AbortError') return
+  setUsuarios(anterior)
+  setErroAcao(mensagemDeErro(e))
+}
+
+}
+  
+
+  if (erroLista) return <p>Erro: {erroLista}</p>
+  if (usuarios === null) return <p>Carregando...</p>
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <main>
+      <h1>Usuários</h1>
+      <button onClick={() => setFormAberto('novo')}>Novo</button>
 
-      <div className="ticks"></div>
+      <ListaUsuario
+        usuarios={usuarios}
+        erro={erroAcao}
+        onEditar={setFormAberto}
+        onExcluir={excluirUsuario}
+      />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      {formAberto && (
+        <FormUsuario
+          key={formAberto === 'novo' ? 'novo' : formAberto.id}
+          inicial={formAberto === 'novo' ? null : formAberto}
+          onSalvar={salvarUsuario}
+          onCancelar={() => setFormAberto(null)}
+        />
+      )}
+    </main>
   )
 }
 
